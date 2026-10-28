@@ -30,6 +30,8 @@ const PHOTO = {
   show: "hf_20261028_135925_f6d78845-750c-406e-9444-6cb4d7d88ac1.png",
   uam: "hf_20261028_135727_153406c6-deba-4626-a7e5-dd6295106f17.png",
 };
+// 5번 '촬영·공연' 사진을 누르면 뜨는 드론 쇼 영상 (HTML 옆에 드론쇼.mp4가 있으면 그 파일을, 없으면 유튜브를 재생)
+const VIDEO = { local: "드론쇼.mp4", youtube: "fiDqHjp-Ias", start: 60, end: 85, title: "2026 서울 한강 드론라이트쇼" };
 const EAGLE = "data:image/png;base64," + b64(path.join(__dirname, "img", "eagle_top.png"));
 const photoPath = TEACHER.photo && path.join(__dirname, "img", TEACHER.photo);
 const TEACHER_PHOTO = photoPath && fs.existsSync(photoPath)
@@ -153,7 +155,7 @@ slides.push(`
   <div class="cases">
     ${cases.map(([k, I, t, d, tg]) => `
     <div class="panel case lift">
-      <div class="thumb"><span class="thumb-ic">${ic(I)}</span><img src="${CDN + PHOTO[k]}" alt="${t} 분야에서 일하는 드론 (AI 생성 이미지)" onerror="this.remove()"></div>
+      <div class="thumb${k === "show" ? " playable" : ""}"><span class="thumb-ic">${ic(I)}</span><img src="${CDN + PHOTO[k]}" alt="${t} 분야에서 일하는 드론 (AI 생성 이미지)" onerror="this.remove()">${k === "show" ? `<span class="play">${ic(fa.FaPlay)}</span>` : ""}</div>
       <div class="case-txt"><b>${t}</b><p>${d}</p><span class="tag ${TAG[tg][1]} ${F(1)}">${TAG[tg][0]}</span></div>
     </div>`).join("")}
   </div>
@@ -191,19 +193,19 @@ slides.push(`
 
 // 7. 정리
 slides.push(`
-<section class="slide dark s7">
+<section class="slide dark s7 live">
   ${rings}
   ${kicker("오늘의 미션")}
   <h2>드론에게 생각하는 법을!</h2>
   <p class="summary">드론은 <mark>하늘을 나는 컴퓨터</mark>, 이제는 <mark>스스로 생각하는 드론</mark>의 시대!</p>
   <div class="loop">
-    <div class="st"><span class="ic xl c-blue">${ic(fa.FaEye)}</span><b>감지</b><small>센서로 보고</small></div>
+    <div class="st veil ${F(1)}"><span class="ic xl c-blue"><span class="vc">${ic(fa.FaEye)}</span></span><span class="vc"><b>감지</b><small>센서로 보고</small></span></div>
     <span class="loop-arrow">${ic(fa.FaArrowRight)}</span>
-    <div class="st"><span class="ic xl c-orange">${ic(fa.FaBrain)}</span><b>판단</b><small>코드로 생각하고</small></div>
+    <div class="st veil ${F(2)}"><span class="ic xl c-orange"><span class="vc">${ic(fa.FaBrain)}</span></span><span class="vc"><b>판단</b><small>코드로 생각하고</small></span></div>
     <span class="loop-arrow">${ic(fa.FaArrowRight)}</span>
-    <div class="st"><span class="ic xl c-teal">${ic(gi.GiDeliveryDrone)}</span><b>행동</b><small>스스로 움직여요</small></div>
+    <div class="st veil ${F(3)}"><span class="ic xl c-teal"><span class="vc">${ic(gi.GiDeliveryDrone)}</span></span><span class="vc"><b>행동</b><small>스스로 움직여요</small></span></div>
   </div>
-  <div class="next"><span class="ic c-orange">${ic(fa.FaLaptopCode)}</span><div><small>이어서 해 볼 활동</small><b>리모컨 대신 코딩으로, 드론에게 생각하는 법을 가르쳐요</b></div></div>
+  <div class="next veil ${F(4)}"><span class="ic c-orange"><span class="vc">${ic(fa.FaLaptopCode)}</span></span><div class="vc"><small>이어서 해 볼 활동</small><b>리모컨 대신 코딩으로, 드론에게 생각하는 법을 가르쳐요</b></div></div>
   ${footer(7)}
 </section>`);
 
@@ -259,6 +261,28 @@ path.frag:not(.shown) { opacity: .15; filter: none; transform: none; }
 .frag.shown { opacity: 1; filter: none; transform: none; }
 .frag.just { animation: pop .6s var(--pop); }
 @keyframes pop { 0% { transform: scale(.9); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
+
+/* 모자이크 공개 (7번): 틀은 그대로, 안쪽 내용만 흐릿한 모자이크에서 선명하게 */
+.frag.veil:not(.shown) { opacity: 1; filter: none; transform: none; }
+.frag.veil.just { animation: none; }
+.veil .vc { display: inline-grid; transition: filter 1.1s ease, opacity 1.1s ease; }
+.st .vc { display: flex; flex-direction: column; align-items: center; }
+.veil:not(.shown) .vc { filter: blur(16px) saturate(.6); opacity: .55; }
+.veil:not(.shown):hover .vc { filter: blur(12px); }
+
+/* 드론 쇼 영상 팝업 */
+.playable { cursor: pointer; }
+.play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 46px; color: #fff; background: rgba(11,31,58,.25); }
+.play svg { width: 92px; height: 92px; padding: 26px 22px 26px 30px; border-radius: 50%; background: rgba(255,122,26,.92); box-shadow: 0 8px 24px rgba(0,0,0,.3); transition: transform .3s var(--pop); }
+.playable:hover .play svg { transform: scale(1.12); }
+#modal { position: fixed; inset: 0; z-index: 20; background: rgba(4,10,20,.82); display: none; align-items: center; justify-content: center; }
+#modal.on { display: flex; animation: fadein .25s ease; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+#modal .box { width: min(86vw, 152vh); aspect-ratio: 16 / 9; position: relative; background: #000; border-radius: 16px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+#modal video, #modal iframe { width: 100%; height: 100%; border: 0; display: block; }
+#modal .close { position: absolute; top: -52px; right: 0; font: 600 16px "Pretendard Variable", sans-serif; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: 8px 18px; cursor: pointer; }
+#modal .cap { position: absolute; bottom: -42px; left: 0; font: 500 16px "Pretendard Variable", sans-serif; color: #C9D6E5; }
+#modal .box { overflow: visible; }
 
 /* ---------- 마우스 효과 (2·5번 슬라이드) ---------- */
 .lift { transition: transform .3s var(--pop), box-shadow .3s ease, opacity .5s ease, filter .5s ease; }
@@ -450,6 +474,8 @@ body:hover #hint { opacity: 1; }
   .frag { opacity: 1 !important; filter: none !important; transform: none !important; }
   .tag.frag { border: 0 !important; color: #fff !important; }
   .tag.frag::after { content: none !important; }
+  .veil .vc { filter: none !important; opacity: 1 !important; }
+  .play { display: none !important; }
   .tag.frag.t-red { background: var(--red) !important; } .tag.frag.t-blue { background: var(--blue) !important; } .tag.frag.t-teal { background: var(--teal) !important; }
   #hud, #hint, #progress { display: none !important; }
 }
@@ -460,6 +486,7 @@ body:hover #hint { opacity: 1; }
 ${slides.join("\n")}
 </main>
 <div id="progress"></div>
+<div id="modal" role="dialog" aria-label="드론 쇼 영상"><div class="box"><button class="close" type="button">닫기 ✕</button><div class="media"></div><div class="cap"></div></div></div>
 <div id="hint">클릭 · → 다음 · ← 이전 · F 전체 화면</div>
 <div id="hud">
   <span id="pos"></span>
@@ -502,14 +529,34 @@ window.goStart = (i) => show(i);
 
 addEventListener("resize", fit);
 addEventListener("keydown", (e) => {
+  if (modal.classList.contains("on")) { if (e.key === "Escape") closeVideo(); return; }
   if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); next(); }
   else if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); prev(); }
   else if (e.key === "Home") show(0);
   else if (e.key === "End") show(slides.length - 1, true);
   else if (e.key === "f" || e.key === "F") toggleFs();
 });
+const VIDEO = ${JSON.stringify(VIDEO)};
+const modal = document.getElementById("modal"), media = modal.querySelector(".media");
+function openVideo() {
+  media.innerHTML = "";
+  const v = document.createElement("video");
+  v.src = VIDEO.local; v.controls = true; v.autoplay = true; v.style.width = v.style.height = "100%";
+  v.addEventListener("timeupdate", () => { if (v.currentTime >= 30) v.pause(); });
+  v.addEventListener("error", () => {
+    media.innerHTML = '<iframe src="https://www.youtube.com/embed/' + VIDEO.youtube + "?autoplay=1&start=" + VIDEO.start + "&end=" + VIDEO.end +
+      '&rel=0&modestbranding=1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+  });
+  media.appendChild(v);
+  modal.querySelector(".cap").textContent = "영상: " + VIDEO.title;
+  modal.classList.add("on");
+}
+function closeVideo() { modal.classList.remove("on"); media.innerHTML = ""; }
+modal.addEventListener("click", (e) => { if (e.target === modal || e.target.closest(".close")) closeVideo(); });
+
 // 클릭: 흐릿한 힌트를 누르면 그 단계까지 공개, 공개된 카드를 누르면 톡 튀는 효과, 빈 곳을 누르면 다음으로
 stage.addEventListener("click", (e) => {
+  if (e.target.closest(".playable")) { openVideo(); return; }
   const ghost = e.target.closest(".frag:not(.shown)");
   if (ghost && slides[cur].contains(ghost)) { step = Math.max(step, +ghost.dataset.step); paint(true); return; }
   const card = e.target.closest(".lift, .hub, .tag.big");
