@@ -1,4 +1,5 @@
 // 10분 시범강의 "드론이란?" 공통 슬라이드 생성 스크립트
+// 실행: NODE_PATH=./node_modules SKILL_DIR=<pptx 스킬 경로> node build.js [출력.pptx]
 const path = require("path");
 const fs = require("fs");
 const pptxgen = require("pptxgenjs");
@@ -11,11 +12,13 @@ const { applyTheme } = require(process.env.SKILL_DIR + "/scripts/apply_theme.js"
 
 const IMG = path.join(__dirname, "img");
 const OUT = process.argv[2] || path.join(__dirname, "drone_intro.pptx");
+const SCRIPT = JSON.parse(fs.readFileSync(path.join(__dirname, "script.json"), "utf8"));
 
 const FONT = "Malgun Gothic";
 const HEX = {
   navy: "0B1F3A", ink: "1A2233", white: "FFFFFF", sky: "EEF5FB",
   orange: "FF7A1A", blue: "2E9BDA", teal: "14B8A6", yellow: "FFC233", purple: "7C5CFF", gray: "8A94A6",
+  red: "E5484D", photoBg: "1C252C", line: "D9E3EE",
 };
 const THEME = {
   name: "Drone Sky",
@@ -34,7 +37,12 @@ async function icon(Comp, hex, size = 256) {
   const buf = await sharp(Buffer.from(svg)).png().toBuffer();
   return "image/png;base64," + buf.toString("base64");
 }
-const img = (f) => path.join(IMG, f);
+// 사진을 상자 비율에 맞춰 가운데를 잘라 넣기
+async function cover(file, w, h) {
+  const px = 600;
+  const buf = await sharp(path.join(IMG, file)).resize({ width: px, height: Math.round(px * h / w), fit: "cover" }).png().toBuffer();
+  return "image/png;base64," + buf.toString("base64");
+}
 
 async function main() {
   const pres = new pptxgen();
@@ -47,17 +55,13 @@ async function main() {
   const W = 13.333;
 
   // ---------- 레이아웃 ----------
-  pres.defineSlideMaster({
-    title: "TITLE_DARK",
-    background: { color: C.text2 },
-    objects: [],
-  });
+  pres.defineSlideMaster({ title: "TITLE_DARK", background: { color: C.text2 }, objects: [] });
   pres.defineSlideMaster({
     title: "CONTENT",
     background: { color: C.background1 },
     margin: [0.4, 0.6, 0.6, 0.6],
     objects: [
-      { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontSize: 34, bold: true, color: C.text2, valign: "middle", margin: 0 }, text: "" } },
+      { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontSize: 32, bold: true, color: C.text2, valign: "middle", margin: 0 }, text: "" } },
       { text: { text: "AI 드론 교육  |  드론이란?", options: { x: 0.6, y: 7.0, w: 6, h: 0.3, fontSize: 10, color: C.accent6, margin: 0 } } },
     ],
     slideNumber: { x: 12.2, y: 7.0, w: 0.5, h: 0.3, fontSize: 10, color: C.accent6, align: "right" },
@@ -66,30 +70,44 @@ async function main() {
     title: "CLOSING_DARK",
     background: { color: C.text2 },
     objects: [
-      { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.45, w: 12.1, h: 0.9, fontSize: 34, bold: true, color: C.background1, valign: "middle", margin: 0 }, text: "" } },
+      { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontSize: 32, bold: true, color: C.background1, valign: "middle", margin: 0 }, text: "" } },
     ],
     slideNumber: { x: 12.2, y: 7.0, w: 0.5, h: 0.3, fontSize: 10, color: C.accent6, align: "right" },
   });
 
-  // 공통 도우미
-  const shadow = () => ({ type: "outer", color: "0B1F3A", opacity: 0.18, blur: 8, offset: 2, angle: 90 });
-  async function iconCircle(slide, x, y, d, Comp, fillColor, name) {
-    slide.addShape(pres.shapes.OVAL, { x, y, w: d, h: d, fill: { color: fillColor }, line: { type: "none" }, objectName: name + " 원" });
-    const pad = d * 0.25;
-    slide.addImage({ data: await icon(Comp, HEX.white), x: x + pad, y: y + pad, w: d - pad * 2, h: d - pad * 2, objectName: name + " 아이콘", altText: name });
+  // ---------- 도우미 ----------
+  const shadow = () => ({ type: "outer", color: "0B1F3A", opacity: 0.16, blur: 8, offset: 2, angle: 90 });
+  const T = (s, text, o) => s.addText(text, Object.assign({ margin: 0, isTextBox: true, valign: "middle" }, o));
+  const card = (s, x, y, w, h, fill, name, extra = {}) =>
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, Object.assign({ x, y, w, h, rectRadius: 0.18, fill: { color: fill }, line: { type: "none" }, objectName: name }, extra));
+  async function iconCircle(s, x, y, d, Comp, fillColor, name, iconHex = HEX.white) {
+    s.addShape(pres.shapes.OVAL, { x, y, w: d, h: d, fill: { color: fillColor }, line: { type: "none" }, objectName: name + " 원" });
+    const pad = d * 0.24;
+    s.addImage({ data: await icon(Comp, iconHex), x: x + pad, y: y + pad, w: d - pad * 2, h: d - pad * 2, objectName: name + " 아이콘", altText: name });
   }
+  function chip(s, x, y, w, h, text, fill, name, color = C.background1, fontSize = 13) {
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: h / 2, fill: { color: fill }, line: { type: "none" }, objectName: name + " 배경" });
+    T(s, text, { x, y, w, h, fontSize, bold: true, color, align: "center", objectName: name });
+  }
+  const notes = (s, i) => s.addNotes(`[시간] ${SCRIPT[i].time}\n[동작] ${SCRIPT[i].action}\n\n${SCRIPT[i].script}\n\n[포인트] ${SCRIPT[i].point}`);
 
   // ========== 1. 표지 ==========
   pres.addSection({ title: "도입" });
   {
     const s = pres.addSlide({ masterName: "TITLE_DARK", sectionTitle: "도입" });
-    s.addImage({ path: img("hero.png"), x: 0, y: 0, w: W, h: 7.5, objectName: "표지 배경 사진", altText: "푸른 하늘을 나는 작은 드론" });
-    s.addShape(pres.shapes.RECTANGLE, { x: 0, y: 0, w: 6.4, h: 7.5, fill: { color: C.text2, transparency: 12 }, line: { type: "none" }, objectName: "제목 배경" });
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.8, y: 2.0, w: 3.1, h: 0.5, rectRadius: 0.25, fill: { color: C.accent1 }, line: { type: "none" }, objectName: "태그 배경" });
-    s.addText("AI 드론 교육 · 1차시 도입", { x: 0.8, y: 2.0, w: 3.1, h: 0.5, fontSize: 14, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "태그" });
-    s.addText("드론, 어디까지\n알고 있니?", { x: 0.8, y: 2.75, w: 5.4, h: 2.0, fontSize: 46, bold: true, color: C.background1, valign: "top", margin: 0, lineSpacingMultiple: 1.05, isTextBox: true, objectName: "표지 제목" });
-    s.addText("하늘을 나는 컴퓨터, 드론 이야기", { x: 0.8, y: 4.9, w: 5.4, h: 0.6, fontSize: 20, color: C.background2, margin: 0, isTextBox: true, objectName: "표지 부제" });
-    s.addNotes("오늘은 우리가 자주 듣는 드론이 무엇이고, 어디서 일하고, 왜 배워야 하는지 알아볼게요.");
+    chip(s, 0.8, 1.3, 3.1, 0.5, "AI 드론 교육 · 1차시 도입", C.accent1, "태그", C.background1, 14);
+    T(s, "드론, 어디까지\n알고 있니?", { x: 0.8, y: 2.0, w: 6.2, h: 1.9, fontSize: 46, bold: true, color: C.background1, valign: "top", lineSpacingMultiple: 1.05, objectName: "표지 제목" });
+    T(s, "하늘을 나는 컴퓨터, 드론 이야기", { x: 0.8, y: 4.0, w: 6.2, h: 0.55, fontSize: 20, color: C.background2, objectName: "표지 부제" });
+    const agenda = [["01", "드론이란?"], ["02", "어디서 일할까?"], ["03", "왜 배워야 할까?"]];
+    agenda.forEach(([n, t], i) => {
+      const x = 0.8 + i * 2.1;
+      T(s, n, { x, y: 5.15, w: 1.9, h: 0.45, fontSize: 20, bold: true, color: C.accent1, objectName: "목차 번호 " + n });
+      T(s, t, { x, y: 5.6, w: 1.95, h: 0.45, fontSize: 15, color: C.background1, objectName: "목차 " + n });
+    });
+    card(s, 7.75, 1.0, 4.9, 5.2, HEX.photoBg, "드론 사진 배경");
+    s.addImage({ path: path.join(IMG, "eagle_top.png"), x: 8.1, y: 1.3, w: 4.2, h: 4.03, objectName: "이글 드론 사진", altText: "주황색 몸체의 이글 교육용 드론을 위에서 본 모습" });
+    T(s, "오늘의 주인공  ·  이글 교육용 드론 (90g)", { x: 7.75, y: 5.5, w: 4.9, h: 0.5, fontSize: 13, color: C.background2, align: "center", objectName: "사진 설명" });
+    notes(s, 0);
   }
 
   // ========== 2. 떠오르는 것 ==========
@@ -103,25 +121,24 @@ async function main() {
       { t: "장난감", sub: "리모컨으로 날리는 드론", I: fa.FaGamepad, c: C.accent3, x: 1.2, y: 4.55 },
       { t: "드론 쇼", sub: "밤하늘을 수놓는 불빛", I: fa.FaWandMagicSparkles, c: C.accent5, x: 8.73, y: 4.55 },
     ];
-    // 연결선 (카드 뒤): 카드 안쪽 모서리 → 원 둘레 45도 지점
     for (const it of items) {
       const left = it.x < cx, top = it.y < cy;
       const ex = left ? it.x + 3.4 : it.x, ey = top ? it.y + 1.2 : it.y;
-      const r = d / 2 * 0.7071;
+      const r = (d / 2) * 0.7071;
       const px = left ? cx - r : cx + r, py = top ? cy - r : cy + r;
       s.addShape(pres.shapes.LINE, { x: Math.min(ex, px), y: Math.min(ey, py), w: Math.abs(px - ex), h: Math.abs(py - ey), flipV: left !== top, line: { color: C.accent6, width: 1.5, dashType: "dash" }, objectName: it.t + " 연결선" });
     }
     s.addShape(pres.shapes.OVAL, { x: cx - d / 2, y: cy - d / 2, w: d, h: d, fill: { color: C.text2 }, line: { type: "none" }, shadow: shadow(), objectName: "가운데 원" });
-    s.addImage({ data: await icon(gi.GiDeliveryDrone, HEX.orange), x: cx - 0.4, y: cy - 0.95, w: 0.8, h: 0.8, objectName: "드론 아이콘", altText: "비행체 아이콘" });
-    s.addText("드론", { x: cx - d / 2, y: cy - 0.1, w: d, h: 0.8, fontSize: 36, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "가운데 글자" });
+    s.addImage({ data: await icon(gi.GiDeliveryDrone, HEX.orange), x: cx - 0.4, y: cy - 0.95, w: 0.8, h: 0.8, objectName: "드론 아이콘", altText: "드론 아이콘" });
+    T(s, "드론", { x: cx - d / 2, y: cy - 0.1, w: d, h: 0.8, fontSize: 36, bold: true, color: C.background1, align: "center", objectName: "가운데 글자" });
     for (const it of items) {
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: it.x, y: it.y, w: 3.4, h: 1.2, rectRadius: 0.2, fill: { color: C.background2 }, line: { type: "none" }, shadow: shadow(), objectName: it.t + " 카드" });
+      card(s, it.x, it.y, 3.4, 1.2, C.background2, it.t + " 카드", { shadow: shadow() });
       await iconCircle(s, it.x + 0.25, it.y + 0.25, 0.7, it.I, it.c, it.t);
-      s.addText(it.t, { x: it.x + 1.15, y: it.y + 0.18, w: 2.1, h: 0.45, fontSize: 20, bold: true, color: C.text2, margin: 0, valign: "middle", isTextBox: true, objectName: it.t + " 제목" });
-      s.addText(it.sub, { x: it.x + 1.15, y: it.y + 0.62, w: 2.15, h: 0.4, fontSize: 12, color: C.text1, margin: 0, valign: "middle", isTextBox: true, objectName: it.t + " 설명" });
+      T(s, it.t, { x: it.x + 1.15, y: it.y + 0.18, w: 2.1, h: 0.45, fontSize: 20, bold: true, color: C.text2, objectName: it.t + " 제목" });
+      T(s, it.sub, { x: it.x + 1.15, y: it.y + 0.62, w: 2.15, h: 0.4, fontSize: 12, color: C.text1, objectName: it.t + " 설명" });
     }
-    s.addText("생각나는 것을 자유롭게 말해 볼까요?", { x: 0.6, y: 6.35, w: 12.1, h: 0.45, fontSize: 16, italic: true, color: C.accent1, align: "center", margin: 0, isTextBox: true, objectName: "발문" });
-    s.addNotes("발문: '드론' 하면 무엇이 떠오르나요? 예상 답은 촬영, 택배, 장난감, 드론 쇼입니다. 학생들의 답을 받은 뒤 다음 장으로 넘어갑니다.");
+    T(s, "드론은 이미 우리 생활 곳곳에 들어와 있어요", { x: 0.6, y: 6.35, w: 12.1, h: 0.45, fontSize: 16, bold: true, color: C.accent1, align: "center", objectName: "정리 문장" });
+    notes(s, 1);
   }
 
   // ========== 3. 드론이란 ==========
@@ -129,39 +146,46 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "드론이란?" });
     s.addText("드론이란?", { placeholder: "title" });
-    s.addImage({ path: img("bee.png"), x: 0.6, y: 1.5, w: 5.6, h: 4.2, shadow: shadow(), objectName: "수벌과 드론 사진", altText: "꿀벌 옆을 나는 작은 드론" });
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.6, y: 5.85, w: 5.6, h: 0.95, rectRadius: 0.15, fill: { color: C.background2 }, line: { type: "none" }, objectName: "이름 이야기 배경" });
-    s.addText([
-      { text: "drone = 영어로 '수벌'", options: { bold: true, color: C.text2, fontSize: 16, breakLine: true } },
-      { text: "날 때 나는 '웅웅~' 소리가 벌과 닮았어요", options: { color: C.text1, fontSize: 13 } },
-    ], { x: 0.85, y: 5.9, w: 5.2, h: 0.85, valign: "middle", margin: 0, isTextBox: true, objectName: "이름 이야기" });
-
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 6.7, y: 1.5, w: 6.0, h: 2.45, rectRadius: 0.2, fill: { color: C.text2 }, line: { type: "none" }, shadow: shadow(), objectName: "정의 카드" });
-    s.addText("드론의 뜻", { x: 7.1, y: 1.75, w: 3, h: 0.4, fontSize: 15, bold: true, color: C.accent1, margin: 0, isTextBox: true, objectName: "정의 라벨" });
-    s.addText("사람이 타지 않고\n하늘을 나는 비행체", { x: 7.1, y: 2.2, w: 5.4, h: 1.5, fontSize: 30, bold: true, color: C.background1, margin: 0, valign: "middle", isTextBox: true, objectName: "정의" });
-
-    const chips = [
-      { t: "멀리서 조종해요", sub: "사람이 리모컨으로", I: fa.FaGamepad, c: C.accent2, x: 6.7 },
-      { t: "스스로 날아요", sub: "코드와 센서로", I: fa.FaRobot, c: C.accent1, x: 9.8 },
+    // 왼쪽: 이름 이야기
+    card(s, 0.6, 1.45, 5.3, 5.25, C.background2, "이름 이야기 카드");
+    T(s, "이름 이야기", { x: 0.95, y: 1.7, w: 3, h: 0.4, fontSize: 15, bold: true, color: C.accent1, objectName: "이름 라벨" });
+    await iconCircle(s, 1.0, 2.35, 1.5, gi.GiBee, C.accent4, "꿀벌", HEX.navy);
+    T(s, "drone", { x: 2.8, y: 2.35, w: 2.9, h: 0.8, fontSize: 40, bold: true, color: C.text2, objectName: "drone 글자" });
+    T(s, "= 영어로 '수벌'", { x: 2.8, y: 3.15, w: 2.9, h: 0.5, fontSize: 20, bold: true, color: C.text1, objectName: "수벌 뜻" });
+    chip(s, 1.0, 4.6, 2.2, 0.55, "웅웅~ 웅웅~", C.accent1, "소리", C.background1, 15);
+    T(s, "날 때 나는 소리가\n벌의 날갯짓 소리와 닮았어요", { x: 1.0, y: 5.35, w: 4.6, h: 1.0, fontSize: 16, color: C.text1, valign: "top", objectName: "이름 설명" });
+    // 오른쪽: 뜻
+    card(s, 6.3, 1.45, 6.4, 2.35, C.text2, "정의 카드", { shadow: shadow() });
+    T(s, "드론의 뜻", { x: 6.7, y: 1.7, w: 3, h: 0.4, fontSize: 15, bold: true, color: C.accent1, objectName: "정의 라벨" });
+    T(s, "사람이 타지 않고\n하늘을 나는 비행체", { x: 6.7, y: 2.15, w: 5.8, h: 1.45, fontSize: 30, bold: true, color: C.background1, objectName: "정의" });
+    // 비행기와 비교
+    const cmp = [
+      { t: "비행기", d: "조종사가 직접 타요", I: fa.FaPlane, c: C.accent6, x: 6.3 },
+      { t: "드론", d: "아무도 타지 않아요", I: gi.GiDeliveryDrone, c: C.accent1, x: 9.55 },
     ];
-    for (const ch of chips) {
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ch.x, y: 4.2, w: 2.9, h: 1.35, rectRadius: 0.2, fill: { color: C.background2 }, line: { type: "none" }, objectName: ch.t + " 카드" });
-      await iconCircle(s, ch.x + 0.2, 4.5, 0.75, ch.I, ch.c, ch.t);
-      s.addText([
-        { text: ch.t, options: { bold: true, fontSize: 15, color: C.text2, breakLine: true } },
-        { text: ch.sub, options: { fontSize: 12, color: C.text1 } },
-      ], { x: ch.x + 1.1, y: 4.3, w: 1.7, h: 1.15, valign: "middle", margin: 0, isTextBox: true, objectName: ch.t });
+    for (const k of cmp) {
+      card(s, k.x, 4.05, 3.15, 1.25, C.background2, k.t + " 카드");
+      await iconCircle(s, k.x + 0.22, 4.27, 0.8, k.I, k.c, k.t);
+      T(s, [
+        { text: k.t, options: { bold: true, fontSize: 17, color: C.text2, breakLine: true } },
+        { text: k.d, options: { fontSize: 13, color: C.text1 } },
+      ], { x: k.x + 1.2, y: 4.15, w: 1.9, h: 1.05, objectName: k.t + " 비교" });
     }
-    s.addText("우리나라 법에서도 드론을 '조종하는 사람이 타지 않고 나는 비행체'라고 정해 두었어요.", { x: 6.7, y: 5.85, w: 6.0, h: 0.95, fontSize: 13, italic: true, color: C.accent6, valign: "middle", margin: 0, isTextBox: true, objectName: "법 한 줄" });
-    s.addNotes("드론(drone)은 영어로 '수벌'이라는 뜻이에요. 날 때 나는 '웅웅~' 소리가 벌과 닮아서 이런 이름이 붙었다고 알려져 있어요.\n드론은 '사람이 타지 않고 하늘을 나는 비행체'예요. 사람이 멀리서 조종하기도 하고, 스스로 날기도 해요.\n우리나라 법에서도 드론을 '조종하는 사람이 타지 않고 나는 비행체'라고 정해 두었어요.");
+    // 나는 방법
+    T(s, [
+      { text: "나는 방법  ", options: { bold: true, color: C.accent1 } },
+      { text: "멀리서 조종하거나 · 코드와 센서로 스스로 날아요", options: { bold: true, color: C.text2 } },
+    ], { x: 6.3, y: 5.5, w: 6.4, h: 0.5, fontSize: 15, objectName: "나는 방법" });
+    T(s, "※ 우리나라 법에서도 '조종하는 사람이 타지 않고 나는 비행체'로 정해 두었어요", { x: 6.3, y: 6.1, w: 6.4, h: 0.5, fontSize: 12, italic: true, color: C.accent6, objectName: "법 한 줄" });
+    notes(s, 2);
   }
 
   // ========== 4. 드론의 몸 ==========
   {
     const s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "드론이란?" });
     s.addText("드론의 몸 살펴보기", { placeholder: "title" });
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 4.72, y: 1.45, w: 3.9, h: 3.8, rectRadius: 0.25, fill: { color: "1C252C" }, line: { type: "none" }, shadow: shadow(), objectName: "드론 사진 배경" });
-    s.addImage({ path: img("eagle_top.png"), x: 4.9, y: 1.6, w: 3.54, h: 3.4, objectName: "이글 드론 위에서 본 모습", altText: "주황색 몸체의 이글 교육용 드론을 위에서 본 모습" });
+    card(s, 4.72, 1.45, 3.9, 3.8, HEX.photoBg, "드론 사진 배경", { shadow: shadow() });
+    s.addImage({ path: path.join(IMG, "eagle_top.png"), x: 4.9, y: 1.6, w: 3.54, h: 3.4, objectName: "이글 드론 위에서 본 모습", altText: "주황색 몸체의 이글 교육용 드론을 위에서 본 모습" });
     const parts = [
       { t: "프로펠러·모터", h: "날개", d: "바람을 일으켜 날게 해요", I: fa.FaFan, c: C.accent2, x: 0.6, y: 1.45 },
       { t: "배터리", h: "심장", d: "날 수 있는 힘을 줘요", I: fa.FaBatteryThreeQuarters, c: C.accent3, x: 0.6, y: 3.45 },
@@ -169,22 +193,22 @@ async function main() {
       { t: "센서", h: "눈·귀", d: "주변을 느껴요", I: fa.FaEye, c: C.accent5, x: 8.95, y: 3.45 },
     ];
     for (const p of parts) {
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: p.x, y: p.y, w: 3.78, h: 1.8, rectRadius: 0.2, fill: { color: C.background2 }, line: { type: "none" }, objectName: p.t + " 카드" });
+      card(s, p.x, p.y, 3.78, 1.8, C.background2, p.t + " 카드");
       await iconCircle(s, p.x + 0.25, p.y + 0.3, 0.8, p.I, p.c, p.t);
-      s.addText(p.t, { x: p.x + 1.25, y: p.y + 0.22, w: 2.4, h: 0.45, fontSize: 18, bold: true, color: C.text2, margin: 0, valign: "middle", isTextBox: true, objectName: p.t + " 이름" });
-      s.addText([
+      T(s, p.t, { x: p.x + 1.25, y: p.y + 0.22, w: 2.4, h: 0.45, fontSize: 18, bold: true, color: C.text2, objectName: p.t + " 이름" });
+      T(s, [
         { text: "사람으로 치면 ", options: { color: C.text1 } },
         { text: p.h, options: { bold: true, color: p.c } },
-      ], { x: p.x + 1.25, y: p.y + 0.7, w: 2.4, h: 0.4, fontSize: 14, margin: 0, valign: "middle", isTextBox: true, objectName: p.t + " 비유" });
-      s.addText(p.d, { x: p.x + 1.25, y: p.y + 1.12, w: 2.45, h: 0.4, fontSize: 12, color: C.accent6, margin: 0, valign: "middle", isTextBox: true, objectName: p.t + " 역할" });
+      ], { x: p.x + 1.25, y: p.y + 0.7, w: 2.4, h: 0.4, fontSize: 14, objectName: p.t + " 비유" });
+      T(s, p.d, { x: p.x + 1.25, y: p.y + 1.12, w: 2.45, h: 0.4, fontSize: 12, color: C.accent6, objectName: p.t + " 역할" });
     }
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.6, y: 5.6, w: 12.1, h: 1.05, rectRadius: 0.2, fill: { color: C.text2 }, line: { type: "none" }, objectName: "핵심 문장 배경" });
-    s.addText([
+    card(s, 0.6, 5.6, 12.1, 1.05, C.text2, "핵심 문장 배경");
+    T(s, [
       { text: "눈(센서)과 두뇌(비행 제어기)가 있으니,  드론은 ", options: { color: C.background1 } },
       { text: "하늘을 나는 컴퓨터", options: { color: C.accent1, bold: true } },
       { text: "예요!", options: { color: C.background1 } },
-    ], { x: 0.9, y: 5.6, w: 11.5, h: 1.05, fontSize: 20, bold: true, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "핵심 문장" });
-    s.addNotes("이글 드론 사진으로 드론의 몸을 살펴봅니다. 프로펠러와 모터는 날개, 배터리는 심장, 비행 제어기는 두뇌, 센서는 눈과 귀예요.\n드론에는 눈(센서)과 두뇌(비행 제어기)가 있어요. 그래서 드론은 하늘을 나는 컴퓨터라고 할 수 있어요.");
+    ], { x: 0.9, y: 5.6, w: 11.5, h: 1.05, fontSize: 20, bold: true, align: "center", objectName: "핵심 문장" });
+    notes(s, 3);
   }
 
   // ========== 5. 활용 사례 ==========
@@ -192,29 +216,34 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "활용 사례" });
     s.addText("드론은 어디서 일할까?", { placeholder: "title" });
+    const TAG = { "위험한 곳": HEX.red, "먼 곳": HEX.blue, "힘든 일": HEX.teal };
     const cases = [
-      { t: "농업", d: "넓은 논밭에 농약·비료 뿌리기", f: "case_agri.png", I: fa.FaSeedling, c: C.accent3 },
-      { t: "배송", d: "섬·산골 마을에 물건 배달", f: "case_delivery.png", I: fa.FaBoxOpen, c: C.accent1 },
-      { t: "구조", d: "길 잃은 사람 찾기, 불난 곳 살피기", f: "case_rescue.png", I: fa.FaLifeRing, c: "E5484D" },
-      { t: "점검", d: "높은 다리·송전탑 살피기", f: "case_inspect.png", I: fa.FaMagnifyingGlass, c: C.accent2 },
-      { t: "촬영·공연", d: "영화 촬영, 밤하늘 드론 쇼", f: "case_show.png", I: fa.FaFilm, c: C.accent5 },
-      { t: "미래 교통", d: "사람을 태우는 하늘 택시", f: "case_uam.png", I: fa.FaCity, c: C.text2 },
+      { t: "농업", d: "넓은 논밭에\n농약·비료 뿌리기", f: "case_agri.png", tag: "힘든 일" },
+      { t: "배송", d: "섬·산골 마을에\n물건 배달", f: "case_delivery.png", tag: "먼 곳" },
+      { t: "구조", d: "길 잃은 사람 찾기,\n불난 곳 살피기", f: "case_rescue.png", tag: "위험한 곳" },
+      { t: "점검", d: "높은 다리·송전탑\n살피기", f: "case_inspect.png", tag: "위험한 곳" },
+      { t: "촬영·공연", d: "하늘 높이 촬영,\n밤하늘 드론 쇼", f: "case_show.png", tag: "힘든 일" },
+      { t: "미래 교통", d: "사람을 태우는\n하늘 택시", f: "case_uam.png", tag: "먼 곳" },
     ];
-    const cw = 3.83, gap = 0.3, ih = 1.62, ch = 2.27;
+    const cw = 3.83, chh = 2.15, th = 1.5;
     for (let i = 0; i < cases.length; i++) {
       const k = cases[i];
-      const x = 0.6 + (i % 3) * (cw + gap), y = 1.4 + Math.floor(i / 3) * (ch + 0.22);
-      s.addShape(pres.shapes.RECTANGLE, { x, y, w: cw, h: ch, fill: { color: C.background2 }, line: { type: "none" }, shadow: shadow(), objectName: k.t + " 카드" });
-      s.addImage({ path: img(k.f), x, y, w: cw, h: ih, objectName: k.t + " 사진", altText: k.t + " 분야에서 일하는 드론" });
-      await iconCircle(s, x + 0.18, y + ih + 0.12, 0.42, k.I, k.c, k.t);
-      s.addText(k.t, { x: x + 0.72, y: y + ih + 0.08, w: cw - 0.85, h: 0.3, fontSize: 15, bold: true, color: C.text2, margin: 0, valign: "middle", isTextBox: true, objectName: k.t + " 이름" });
-      s.addText(k.d, { x: x + 0.72, y: y + ih + 0.36, w: cw - 0.85, h: 0.27, fontSize: 12, color: C.text1, margin: 0, valign: "middle", isTextBox: true, objectName: k.t + " 설명" });
+      const x = 0.6 + (i % 3) * (cw + 0.3), y = 1.4 + Math.floor(i / 3) * (chh + 0.25);
+      card(s, x, y, cw, chh, C.background2, k.t + " 카드");
+      s.addImage({ data: await cover(k.f, th, th), x: x + 0.2, y: y + 0.32, w: th, h: th, objectName: k.t + " 사진", altText: k.t + " 분야에서 일하는 드론" });
+      T(s, k.t, { x: x + 1.9, y: y + 0.28, w: 1.8, h: 0.42, fontSize: 18, bold: true, color: C.text2, objectName: k.t + " 이름" });
+      T(s, k.d, { x: x + 1.9, y: y + 0.72, w: 1.85, h: 0.72, fontSize: 13, color: C.text1, valign: "top", objectName: k.t + " 설명" });
+      chip(s, x + 1.9, y + 1.45, 1.2, 0.36, k.tag, TAG[k.tag], k.t + " 태그", C.background1, 12);
     }
-    s.addText([
-      { text: "공통점  ", options: { bold: true, color: C.accent1 } },
-      { text: "위험하거나 · 멀거나 · 사람이 하기 힘든 일을 대신해요", options: { bold: true, color: C.text2 } },
-    ], { x: 0.6, y: 6.33, w: 12.1, h: 0.5, fontSize: 18, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "공통점" });
-    s.addNotes("농업: 넓은 논밭에 농약과 비료를 뿌려요. 배송: 섬이나 산골 마을에 물건을 배달해요. 구조: 산에서 길 잃은 사람을 찾고, 불난 곳을 살펴요. 점검: 높은 다리나 송전탑을 살펴요. 촬영·공연: 영화를 찍고, 밤하늘에 드론 라이트 쇼를 해요. 미래 교통: 사람을 태우는 하늘 택시도 준비 중이에요.\n공통점이 보이나요? 드론은 위험하거나, 멀거나, 사람이 하기 힘든 일을 대신해 줘요.\n(사진은 이해를 돕기 위한 AI 생성 이미지입니다.)");
+    const rowX = (W - 10.3) / 2;
+    T(s, "공통점", { x: rowX, y: 6.3, w: 1.3, h: 0.5, fontSize: 17, bold: true, color: C.accent1, objectName: "공통점 라벨" });
+    let cx = rowX + 1.5;
+    for (const [t, c] of Object.entries(TAG)) {
+      chip(s, cx, 6.32, 1.55, 0.46, t, c, "공통점 " + t, C.background1, 15);
+      cx += 1.7;
+    }
+    T(s, "→  사람 대신 드론이 맡아요", { x: cx + 0.1, y: 6.3, w: 3.7, h: 0.5, fontSize: 17, bold: true, color: C.text2, objectName: "공통점 문장" });
+    notes(s, 4);
   }
 
   // ========== 6. 왜 배워야 할까 ==========
@@ -222,40 +251,48 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "배워야 하는 이유" });
     s.addText("왜 드론을 배워야 할까?", { placeholder: "title" });
-    // 진화 흐름
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.6, y: 1.45, w: 5.0, h: 1.55, rectRadius: 0.2, fill: { color: C.background2 }, line: { type: "none" }, objectName: "조종 드론 카드" });
+    card(s, 0.6, 1.45, 5.0, 1.55, C.background2, "조종 드론 카드");
     await iconCircle(s, 0.9, 1.8, 0.85, fa.FaGamepad, C.accent6, "조종 드론");
-    s.addText([
+    T(s, [
+      { text: "지금까지", options: { bold: true, fontSize: 12, color: C.accent6, breakLine: true } },
       { text: "사람이 조종하는 드론", options: { bold: true, fontSize: 18, color: C.text2, breakLine: true } },
       { text: "리모컨으로 하나하나 움직여요", options: { fontSize: 13, color: C.text1 } },
-    ], { x: 2.0, y: 1.55, w: 3.45, h: 1.35, valign: "middle", margin: 0, isTextBox: true, objectName: "조종 드론" });
+    ], { x: 2.0, y: 1.5, w: 3.45, h: 1.45, objectName: "조종 드론" });
     s.addImage({ data: await icon(fa.FaArrowRight, HEX.orange), x: 6.27, y: 1.87, w: 0.75, h: 0.75, objectName: "진화 화살표", altText: "오른쪽 화살표" });
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 7.7, y: 1.45, w: 5.0, h: 1.55, rectRadius: 0.2, fill: { color: C.text2 }, line: { type: "none" }, shadow: shadow(), objectName: "생각하는 드론 카드" });
+    card(s, 7.7, 1.45, 5.0, 1.55, C.text2, "생각하는 드론 카드", { shadow: shadow() });
     await iconCircle(s, 8.0, 1.8, 0.85, fa.FaBrain, C.accent1, "생각하는 드론");
-    s.addText([
+    T(s, [
+      { text: "앞으로", options: { bold: true, fontSize: 12, color: C.accent1, breakLine: true } },
       { text: "스스로 생각하는 드론", options: { bold: true, fontSize: 18, color: C.background1, breakLine: true } },
       { text: "장애물을 피하고 길을 찾아요", options: { fontSize: 13, color: C.background2 } },
-    ], { x: 9.1, y: 1.55, w: 3.5, h: 1.35, valign: "middle", margin: 0, isTextBox: true, objectName: "생각하는 드론" });
-    s.addText([
-      { text: "드론이 생각하게 만드는 것 = ", options: { color: C.text2 } },
+    ], { x: 9.1, y: 1.5, w: 3.5, h: 1.45, objectName: "생각하는 드론" });
+    T(s, [
+      { text: "드론이 스스로 생각하게 만드는 힘 = ", options: { color: C.text2 } },
       { text: "AI와 코딩", options: { color: C.accent1, bold: true } },
-    ], { x: 0.6, y: 3.15, w: 12.1, h: 0.5, fontSize: 18, bold: true, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "AI 문장" });
+    ], { x: 0.6, y: 3.15, w: 12.1, h: 0.5, fontSize: 18, bold: true, align: "center", objectName: "AI 문장" });
 
     const why = [
-      { t: "눈으로 보는 AI", d: "내가 만든 코드가 진짜로 날아서 결과를 바로 보여 줘요", I: fa.FaLaptopCode, c: C.accent1 },
-      { t: "여러 과목이 한 번에", d: "코딩 + 과학 + 수학이 함께 쓰여요", I: fa.FaPuzzlePiece, c: C.accent2 },
-      { t: "미래의 직업", d: "드론 개발자, 조종사, 데이터 분석가 등 새로운 직업이 생겨요", I: fa.FaBriefcase, c: C.accent3 },
+      { n: "1", t: "눈으로 보는 AI", d: "내가 만든 코드가 진짜로 날아서 결과를 바로 보여 줘요", I: fa.FaLaptopCode, c: C.accent1, tags: ["코드", "→", "비행"] },
+      { n: "2", t: "여러 과목이 한 번에", d: "드론 하나에 여러 과목이 함께 들어 있어요", I: fa.FaPuzzlePiece, c: C.accent2, tags: ["코딩", "과학", "수학"] },
+      { n: "3", t: "미래의 직업", d: "드론과 함께 새로운 직업이 생기고 있어요", I: fa.FaBriefcase, c: C.accent3, tags: ["개발자", "조종사", "분석가"] },
     ];
     const cw = 3.83;
     for (let i = 0; i < why.length; i++) {
       const w0 = why[i], x = 0.6 + i * (cw + 0.3);
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 3.85, w: cw, h: 2.2, rectRadius: 0.2, fill: { color: C.background1 }, line: { color: "D9E3EE", width: 1 }, shadow: shadow(), objectName: w0.t + " 카드" });
-      await iconCircle(s, x + 0.3, 4.1, 0.8, w0.I, w0.c, w0.t);
-      s.addText(w0.t, { x: x + 1.25, y: 4.1, w: cw - 1.4, h: 0.8, fontSize: 18, bold: true, color: C.text2, margin: 0, valign: "middle", isTextBox: true, objectName: w0.t + " 제목" });
-      s.addText(w0.d, { x: x + 0.3, y: 5.05, w: cw - 0.55, h: 0.85, fontSize: 14, color: C.text1, margin: 0, valign: "top", isTextBox: true, objectName: w0.t + " 설명" });
+      card(s, x, 3.85, cw, 2.3, C.background1, w0.t + " 카드", { line: { color: HEX.line, width: 1 }, shadow: shadow() });
+      await iconCircle(s, x + 0.3, 4.1, 0.75, w0.I, w0.c, w0.t);
+      T(s, w0.t, { x: x + 1.2, y: 4.1, w: cw - 1.35, h: 0.75, fontSize: 18, bold: true, color: C.text2, objectName: w0.t + " 제목" });
+      T(s, w0.d, { x: x + 0.3, y: 4.98, w: cw - 0.55, h: 0.65, fontSize: 13, color: C.text1, valign: "top", objectName: w0.t + " 설명" });
+      let tx = x + 0.3;
+      for (const tg of w0.tags) {
+        if (tg === "→") { T(s, "→", { x: tx, y: 5.68, w: 0.35, h: 0.34, fontSize: 14, bold: true, color: w0.c, align: "center", objectName: w0.t + " 화살표" }); tx += 0.4; continue; }
+        s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: tx, y: 5.68, w: 0.95, h: 0.34, rectRadius: 0.17, fill: { color: C.background2 }, line: { color: w0.c, width: 1 }, objectName: w0.t + " " + tg });
+        T(s, tg, { x: tx, y: 5.68, w: 0.95, h: 0.34, fontSize: 11, bold: true, color: w0.c, align: "center", objectName: w0.t + " " + tg + " 글자" });
+        tx += 1.05;
+      }
     }
-    s.addText("여러분은 어떤 일을 하는 드론을 만들고 싶나요?", { x: 0.6, y: 6.3, w: 12.1, h: 0.45, fontSize: 16, italic: true, color: C.accent1, align: "center", margin: 0, isTextBox: true, objectName: "발문" });
-    s.addNotes("앞으로의 드론은 사람이 조종하지 않아도 스스로 장애물을 피하고, 길을 찾아요. 이렇게 생각하게 만드는 것이 AI와 코딩이에요.\n드론을 배우면 좋은 점은 세 가지예요. 내가 만든 코드가 진짜로 날아서 결과를 바로 보여 주고, 코딩·과학·수학이 함께 쓰이고, 드론 개발자처럼 새로운 직업이 생기고 있어요.\n발문: 여러분은 어떤 일을 하는 드론을 만들고 싶나요?");
+    T(s, "Q. 여러분은 어떤 일을 하는 드론을 만들고 싶나요?", { x: 0.6, y: 6.35, w: 12.1, h: 0.45, fontSize: 16, italic: true, bold: true, color: C.accent1, align: "center", objectName: "발문" });
+    notes(s, 5);
   }
 
   // ========== 7. 마무리 ==========
@@ -263,26 +300,33 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "CLOSING_DARK", sectionTitle: "마무리" });
     s.addText("오늘의 미션: 드론에게 생각하는 법을!", { placeholder: "title" });
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.6, y: 1.65, w: 5.2, h: 4.6, rectRadius: 0.25, fill: { color: "1C252C" }, line: { type: "none" }, objectName: "드론 사진 배경" });
-    s.addImage({ path: img("eagle_top.png"), x: 1.0, y: 1.85, w: 4.4, h: 4.22, objectName: "이글 드론 사진", altText: "주황색 몸체의 이글 교육용 드론" });
+    T(s, [
+      { text: "드론은 ", options: { color: C.background1 } },
+      { text: "하늘을 나는 컴퓨터", options: { color: C.accent1, bold: true } },
+      { text: ",  이제는 ", options: { color: C.background1 } },
+      { text: "스스로 생각하는 드론", options: { color: C.accent1, bold: true } },
+      { text: "의 시대!", options: { color: C.background1 } },
+    ], { x: 0.6, y: 1.35, w: 12.1, h: 0.6, fontSize: 20, align: "center", objectName: "한 문장 정리" });
     const steps = [
       { t: "감지", d: "센서로 보고", I: fa.FaEye, c: C.accent2 },
       { t: "판단", d: "코드로 생각하고", I: fa.FaBrain, c: C.accent1 },
       { t: "행동", d: "스스로 움직여요", I: gi.GiDeliveryDrone, c: C.accent3 },
     ];
+    const sw = 2.6, gap = 1.3, x0 = (W - (sw * 3 + gap * 2)) / 2;
     for (let i = 0; i < steps.length; i++) {
-      const st = steps[i], x = 6.55 + i * 2.15;
-      await iconCircle(s, x + 0.2, 1.85, 1.35, st.I, st.c, st.t);
-      s.addText(st.t, { x, y: 3.35, w: 1.75, h: 0.5, fontSize: 22, bold: true, color: C.background1, align: "center", margin: 0, isTextBox: true, objectName: st.t + " 단계" });
-      s.addText(st.d, { x, y: 3.85, w: 1.75, h: 0.4, fontSize: 14, color: C.background2, align: "center", margin: 0, isTextBox: true, objectName: st.t + " 설명" });
-      if (i < 2) s.addImage({ data: await icon(fa.FaArrowRight, HEX.gray), x: x + 1.82, y: 2.33, w: 0.38, h: 0.38, objectName: "단계 화살표 " + (i + 1), altText: "다음 단계" });
+      const st = steps[i], x = x0 + i * (sw + gap);
+      await iconCircle(s, x + (sw - 1.6) / 2, 2.3, 1.6, st.I, st.c, st.t);
+      T(s, st.t, { x, y: 4.0, w: sw, h: 0.55, fontSize: 24, bold: true, color: C.background1, align: "center", objectName: st.t + " 단계" });
+      T(s, st.d, { x, y: 4.55, w: sw, h: 0.4, fontSize: 15, color: C.background2, align: "center", objectName: st.t + " 설명" });
+      if (i < 2) s.addImage({ data: await icon(fa.FaArrowRight, HEX.gray), x: x + sw + (gap - 0.5) / 2, y: 2.85, w: 0.5, h: 0.5, objectName: "단계 화살표 " + (i + 1), altText: "다음 단계" });
     }
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 6.55, y: 4.65, w: 6.15, h: 1.6, rectRadius: 0.2, fill: { color: C.background1, transparency: 90 }, line: { color: C.accent1, width: 1.5 }, objectName: "정리 카드" });
-    s.addText([
-      { text: "드론은 하늘을 나는 컴퓨터!", options: { bold: true, color: C.background1, fontSize: 20, breakLine: true } },
-      { text: "이제는 스스로 생각하는 드론의 시대예요", options: { bold: true, color: C.accent1, fontSize: 18 } },
-    ], { x: 6.85, y: 4.75, w: 5.6, h: 1.4, valign: "middle", margin: 0, isTextBox: true, objectName: "한 문장 정리" });
-    s.addNotes("한 문장 정리: 드론은 하늘을 나는 컴퓨터이고, 이제는 스스로 생각하는 드론의 시대예요.\n본 수업 예고: 오늘 우리는 드론을 조종하는 게 아니라, 코딩으로 드론에게 생각하는 법을 가르쳐 볼 거예요!");
+    card(s, 2.2, 5.35, 8.93, 1.2, C.background1, "예고 카드", { fill: { color: C.background1, transparency: 90 }, line: { color: C.accent1, width: 1.5 } });
+    await iconCircle(s, 2.5, 5.55, 0.8, fa.FaLaptopCode, C.accent1, "예고");
+    T(s, [
+      { text: "이어서 해 볼 활동", options: { bold: true, color: C.accent1, fontSize: 13, breakLine: true } },
+      { text: "리모컨 대신 코딩으로, 드론에게 생각하는 법을 가르쳐요", options: { bold: true, color: C.background1, fontSize: 18 } },
+    ], { x: 3.5, y: 5.4, w: 7.5, h: 1.1, objectName: "예고 문장" });
+    notes(s, 6);
   }
 
   await pres.writeFile({ fileName: OUT });
